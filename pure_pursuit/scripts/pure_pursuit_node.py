@@ -11,13 +11,13 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from visualization_msgs.msg import Marker
 
-
+#ROS quaternion to yaw angle (heading) in radians
 def quaternion_to_yaw(q):
     siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
     cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
     return math.atan2(siny_cosp, cosy_cosp)
 
-
+#Reads waypoints file
 def load_waypoints(path):
     if not os.path.isfile(path):
         raise FileNotFoundError(f'Waypoint file not found: {path}')
@@ -46,6 +46,7 @@ class PurePursuit(Node):
   def __init__(self):
     super().__init__('pure_pursuit_node')
 
+    #Parameters
     self.declare_parameter('waypoint_file', '')
     self.declare_parameter('lookahead_distance', 1.0)
     self.declare_parameter('wheelbase', 0.33)
@@ -88,6 +89,7 @@ class PurePursuit(Node):
     self.create_timer(2.0, self.publish_path_marker)
 
   def publish_path_marker(self):
+    #topic: /pure_pursuit/waypoints
     marker = Marker()
     marker.header.frame_id = self.frame_id
     marker.header.stamp = self.get_clock().now().to_msg()
@@ -112,6 +114,7 @@ class PurePursuit(Node):
     self.path_marker_pub.publish(marker)
 
   def publish_lookahead_marker(self, gx, gy):
+    #topic: /pure_pursuit/lookahead
     marker = Marker()
     marker.header.frame_id = self.frame_id
     marker.header.stamp = self.get_clock().now().to_msg()
@@ -133,13 +136,17 @@ class PurePursuit(Node):
     self.lookahead_marker_pub.publish(marker)
 
   def get_lookahead_point(self, x, y):
+    #gets distance from car to waypoint
     distances = np.hypot(self.waypoints[:, 0] - x, self.waypoints[:, 1] - y)
     closest_idx = int(np.argmin(distances))
 
     n = len(self.waypoints)
+    #drives along path
     for i in range(n):
       idx = (closest_idx + i) % n
+      #first point outside lookahead radius
       if distances[idx] >= self.lookahead:
+        #nearest waypoint is already farther than L so use that point
         if i == 0:
           return self.waypoints[idx, 0], self.waypoints[idx, 1], distances[idx]
 
@@ -149,6 +156,7 @@ class PurePursuit(Node):
         if d_curr <= d_prev:
           return self.waypoints[idx, 0], self.waypoints[idx, 1], d_curr
 
+        #interpolation between previous and current waypoint
         t = (self.lookahead - d_prev) / (d_curr - d_prev)
         t = float(np.clip(t, 0.0, 1.0))
         gx = self.waypoints[prev_idx, 0] + t * (
@@ -176,11 +184,12 @@ class PurePursuit(Node):
     if local_x <= 0.0:
       return 0.0
 
-    # gamma = 2*y / L^2 from lecture; steering = atan(wheelbase * gamma)
+    # gamma (curvature) = 2*y / L^2 from lecture; steering = atan(wheelbase * gamma)
     gamma = 2.0 * local_y / (lookahead_dist * lookahead_dist)
     steering = math.atan(self.wheelbase * gamma)
     return float(np.clip(steering, -self.max_steering, self.max_steering))
 
+  #Full cycle
   def pose_callback(self, x, y, yaw):
     gx, gy, lookahead_dist = self.get_lookahead_point(x, y)
     local_x, local_y = self.transform_to_vehicle_frame(gx, gy, x, y, yaw)

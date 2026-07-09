@@ -19,6 +19,7 @@ class WaypointLogger(Node):
   def __init__(self):
     super().__init__('waypoint_logger')
 
+    #parameters
     self.declare_parameter('output_file', 'waypoints.csv')
     self.declare_parameter('pose_topic', '/ego_racecar/odom')
     self.declare_parameter('pose_type', 'odom')
@@ -33,9 +34,11 @@ class WaypointLogger(Node):
     self.last_y = None
     self.points = []
 
+    #Overwrite file if necessary
     if os.path.exists(self.output_file):
       os.remove(self.output_file)
 
+    #Write file header
     with open(self.output_file, 'w', newline='') as csvfile:
       writer = csv.writer(csvfile)
       writer.writerow(['x', 'y', 'theta'])
@@ -47,6 +50,7 @@ class WaypointLogger(Node):
 
     self.get_logger().info(f'Logging waypoints to {self.output_file}')
 
+  #Skip too close waypoints otherwise add to file
   def maybe_log(self, x, y, yaw):
     if self.last_x is not None:
       dist = math.hypot(x - self.last_x, y - self.last_y)
@@ -57,6 +61,7 @@ class WaypointLogger(Node):
     self.last_y = y
     self.points.append((x, y, yaw))
 
+    #Write waypoints to file
     with open(self.output_file, 'a', newline='') as csvfile:
       writer = csv.writer(csvfile)
       writer.writerow([f'{x:.4f}', f'{y:.4f}', f'{yaw:.4f}'])
